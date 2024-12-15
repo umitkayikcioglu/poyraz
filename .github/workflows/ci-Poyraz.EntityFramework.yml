@@ -152,7 +152,7 @@ jobs:
         run: dotnet pack $projectFile --configuration $buildConfiguration --no-restore --no-build --output ${{env.packageOutputPath}}
 
       - name: Publish artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: packages
           path: ${{env.packageOutputPath}}/*.nupkg
@@ -195,7 +195,7 @@ jobs:
         run: dotnet nuget push '${{env.packageOutputPath}}/*.nupkg' --skip-duplicate --source "nuget.org" --api-key ${{secrets.NUGET_API_KEY}}
 
       - name: Publish artifacts (output)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: output

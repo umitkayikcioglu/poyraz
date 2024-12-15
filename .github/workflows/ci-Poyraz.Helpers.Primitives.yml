@@ -191,7 +191,7 @@ jobs:
             [Changelog](https://github.com/${{github.repository}}/blob/${{steps.extract_metadata.outputs.branch}}/CHANGELOG.md)
 
       - name: Push to GitHub Packages
-        run: dotnet nuget push '${{env.packageOutputPath}}/*.nupkg' --skip-duplicate --source "github" --api-key ${{secrets.GITHUB_TOKEN}}
+        run: dotnet nuget push '${{env.packageOutputPath}}/*.nupkg' --skip-duplicate --source "github" --api-key ${{secrets.PAT}}
 
       - name: Push to Nuget
         if: steps.extract_metadata_environment.outputs.isProduction == true

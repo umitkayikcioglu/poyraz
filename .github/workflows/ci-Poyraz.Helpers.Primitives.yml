@@ -16,8 +16,11 @@ on:
   push:
     branches: [master, release-preview, release-qa, develop]
     paths:
-    - '.github/workflows/Poyraz.Helpers.Primitives.yml'
+    - '.github/workflows/ci-Poyraz.Helpers.Primitives.yml'
     - 'src/Poyraz.Helpers.Primitives/**'
+
+permissions:
+  contents: write
 
 env:
   version: '8.0'

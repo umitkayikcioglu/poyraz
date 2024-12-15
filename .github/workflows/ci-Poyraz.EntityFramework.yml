@@ -12,12 +12,15 @@ on:
         description: 'initiate rolling deployment'
         default: false
   repository_dispatch:
-    types: []
+    types: [Poyraz.Helpers.Primitives]
   push:
     branches: [master, release-preview, release-qa, develop]
     paths:
-      - '.github/workflows/Poyraz.EntityFramework.yml'
+      - '.github/workflows/ci-Poyraz.EntityFramework.yml'
       - 'src/Poyraz.EntityFramework/**'
+
+permissions:
+  contents: write
 
 env:
   version: '8.0'

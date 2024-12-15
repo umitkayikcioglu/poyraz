@@ -9,15 +9,19 @@ using System.Threading.Tasks;
 
 namespace Poyraz.EntityFramework.Services
 {
-	public class Repository<T> : IRepository<T> where T : class, IEntity
+	internal class Repository<TContext, T> : IRepository<T>
+		where TContext : DbContext
+		where T : class, IEntity
 	{
-		protected DbContext DBContext;
+		protected readonly TContext DBContext;
 		internal DbSet<T> DBSet;
-		public Repository(DbContext dbContext)
+
+		public Repository(TContext dbContext)
 		{
 			DBContext = dbContext;
 			DBSet = dbContext.Set<T>();
 		}
+
 		public void Add(T entity)
 		{
 			DBSet.Add(entity);
@@ -44,11 +48,11 @@ namespace Poyraz.EntityFramework.Services
 			DBContext.Entry(entity).State = EntityState.Modified;
 		}
 
-
 		public async Task<T> SingleAsync(ISpecification<T> specification)
 		{
 			return await ApplySpecification(specification).SingleAsync();
 		}
+
 		public async Task<T> FindAsync(Expression<Func<T, bool>> predicate)
 		{
 			return await DBSet.FirstOrDefaultAsync(predicate);
@@ -82,12 +86,12 @@ namespace Poyraz.EntityFramework.Services
 
 		public bool Contains(ISpecification<T> specification = null)
 		{
-			return Count(specification) > 0 ? true : false;
+			return Count(specification) > 0;
 		}
 
 		public bool Contains(Expression<Func<T, bool>> predicate)
 		{
-			return Count(predicate) > 0 ? true : false;
+			return Count(predicate) > 0;
 		}
 
 		public int Count(ISpecification<T> specification = null)
@@ -97,19 +101,19 @@ namespace Poyraz.EntityFramework.Services
 
 		public int CountExcludePagingParameter(ISpecification<T> specification = null)
 		{
-			specification.UndoPaging();
+			specification?.UndoPaging();
 			return ApplySpecification(specification).Count();
 		}
 
 		public int Count(Expression<Func<T, bool>> predicate)
 		{
-			return DBSet.Where(predicate).Count();
+			return DBSet.Count(predicate);
 		}
 
 		private IQueryable<T> ApplySpecification(ISpecification<T> spec)
 		{
 			if (spec == null)
-				return DBSet.AsQueryable();
+				return DBSet;
 
 			return SpecificationEvaluator<T>.GetQuery(DBSet.AsQueryable(), spec);
 		}

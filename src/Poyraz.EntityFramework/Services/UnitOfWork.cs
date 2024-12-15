@@ -7,12 +7,13 @@ using System.Threading.Tasks;
 
 namespace Poyraz.EntityFramework.Services
 {
-	public sealed class UnitOfWork : IUnitOfWork
+	internal sealed class UnitOfWork<TContext> : IUnitOfWork
+		where TContext : DbContext
 	{
-		private readonly DbContext _dbContext;
+		private readonly TContext _dbContext;
 		private Hashtable _repositories;
 
-		public UnitOfWork(DbContext dbContext)
+		public UnitOfWork(TContext dbContext)
 		{
 			_dbContext = dbContext;
 		}
@@ -31,11 +32,11 @@ namespace Poyraz.EntityFramework.Services
 
 			if (!_repositories.ContainsKey(type))
 			{
-				var repositoryType = typeof(Repository<>);
-
-				var repositoryInstance =
-					Activator.CreateInstance(repositoryType
-						.MakeGenericType(typeof(TEntity)), _dbContext);
+				var repositoryType = typeof(Repository<,>);
+				var repositoryInstance = Activator.CreateInstance(
+					repositoryType.MakeGenericType(typeof(TContext), typeof(TEntity)),
+					_dbContext
+				);
 
 				_repositories.Add(type, repositoryInstance);
 			}

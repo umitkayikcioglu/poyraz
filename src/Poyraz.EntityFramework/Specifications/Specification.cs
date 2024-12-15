@@ -1,5 +1,6 @@
 ﻿using Poyraz.EntityFramework.Abstractions;
 using Poyraz.EntityFramework.Attributes;
+using Poyraz.EntityFramework.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -57,43 +58,13 @@ namespace Poyraz.EntityFramework.Specifications
 
 		public virtual void ApplyQueryStringParameters<TDto>(QueryStringParameters queryStringParameters) where TDto : class
 		{
-			OrderByWithQueryString = queryStringParameters.OrderBy;
-			if (!string.IsNullOrEmpty(OrderByWithQueryString))
-			{
-				if (OrderByWithQueryString.IndexOf('.') > -1)
-					throw new InvalidCastException();
-				else
-				{
-					var props = typeof(TDto).GetProperties();
-					var attr = props
-										   .Select(s => new
-										   {
-											   s.Name,
-											   Attr = s.GetCustomAttribute<SortEntityFieldAttribute>()
-										   })
-										   .Where(w => w.Attr != null);
-					if (attr.Any())
-					{
-						var orderParams = OrderByWithQueryString.Trim().Split(',');
-						for (int i = 0; i < orderParams.Length; i++)
-						{
-							var propertyFromQueryName = orderParams[i].Trim().Split(" ")[0];
-							var entityField = attr.FirstOrDefault(a => propertyFromQueryName.Equals(a.Name, StringComparison.InvariantCultureIgnoreCase));
-							if (entityField != null)
-							{
-								if (entityField.Attr.EntityName == typeof(TEntity).Name)
-									orderParams[i] = entityField.Attr.PropertyName + " " + orderParams[i].Trim().Split(" ")[1];
-								else
-									orderParams[i] = entityField.Attr.SortName + " " + orderParams[i].Trim().Split(" ")[1];
-							}
-						}
+			OrderByWithQueryString = queryStringParameters.GetOrderQueryString<TDto>(typeof(TEntity));
 
-						OrderByWithQueryString = string.Join(",", orderParams);
-					}
-				}
-			}
+			int skip = 0;
+			if (queryStringParameters.PageNumber > 0)
+				skip = (queryStringParameters.PageNumber - 1) * queryStringParameters.PageSize;
 
-			ApplyPaging((queryStringParameters.PageNumber - 1) * queryStringParameters.PageSize, queryStringParameters.PageSize);
+			ApplyPaging(skip, queryStringParameters.PageSize);
 		}
 
 		public virtual void UndoPaging()

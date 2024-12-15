@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Poyraz.EntityFramework.Abstractions;
+using Poyraz.EntityFramework.Specifications.Evaluators;
 using System.Linq;
 
 namespace Poyraz.EntityFramework.Specifications.Evaluators

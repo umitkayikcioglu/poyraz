@@ -17,6 +17,11 @@ namespace Poyraz.EntityFramework.Specifications.Evaluators
 				query = query.Where(specification.Criteria);
 			}
 
+			if (specification.SearchFields != null)
+			{
+				query = query.Where(SpecificationOrderEvaluator.ApplySearch<TEntity>(specification.SearchFields));
+			}
+
 			// Includes all expression-based includes
 			query = specification.Includes.Aggregate(query,
 									(current, include) => current.Include(include));

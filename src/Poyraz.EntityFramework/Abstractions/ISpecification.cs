@@ -8,6 +8,7 @@ namespace Poyraz.EntityFramework.Abstractions
 	{
 		bool IsSplitQuery { get; }
 		Expression<Func<T, bool>> Criteria { get; }
+		Dictionary<string, string> SearchFields { get; }
 		List<Expression<Func<T, object>>> Includes { get; }
 		List<string> IncludeStrings { get; }
 		Expression<Func<T, object>> OrderBy { get; }

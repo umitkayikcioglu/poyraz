@@ -17,7 +17,7 @@ namespace Poyraz.EntityFramework.Utilities
 			where TDto : class
 		{
 
-			// Apply search filter
+			// Apply custom search filter
 			if (!string.IsNullOrWhiteSpace(queryStringParameters.Search) && searchFields != null && searchFields.Count > 0)
 			{
 				// Combine fields dynamically
@@ -44,12 +44,17 @@ namespace Poyraz.EntityFramework.Utilities
 				}
 			}
 
+			var result = queryStringParameters.GetOrderAndSearchFromQueryString<TDto>(query.ElementType);
+			// Apply search query string
+			if (result.HasValue)
+				query = query.Where(SpecificationOrderEvaluator.ApplySearch<TEntity>(result.Value.SearchFields));
+
 			// Get total count
 			int totalCount = await query.CountAsync();
 
 			// Apply order query string
-			string orderQueryString = queryStringParameters.GetOrderQueryString<TDto>(query.ElementType);
-			query = SpecificationOrderEvaluator.ApplySort(query, orderQueryString);
+			if (result.HasValue)
+				query = SpecificationOrderEvaluator.ApplySort(query, result.Value.OrderQuery);
 
 			// Apply paging
 			int skip = 0;

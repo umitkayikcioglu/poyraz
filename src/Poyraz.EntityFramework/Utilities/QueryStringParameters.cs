@@ -1,6 +1,7 @@
 ﻿using Poyraz.EntityFramework.Attributes;
 using Poyraz.EntityFramework.Specifications;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
@@ -25,43 +26,52 @@ namespace Poyraz.EntityFramework.Utilities
 		/// <typeparam name="TDto">The DTO type.</typeparam>
 		/// <param name="entityType">The entity type.</param>
 		/// <returns>A transformed order query string for the entity.</returns>
-		internal string GetOrderQueryString<TDto>(Type entityType)
+		internal (string OrderQuery, Dictionary<string, string> SearchFields)? GetOrderAndSearchFromQueryString<TDto>(Type entityType)
 			where TDto : class
 		{
-			if (string.IsNullOrWhiteSpace(OrderBy))
+			if (string.IsNullOrWhiteSpace(OrderBy) && string.IsNullOrEmpty(Search))
 				return null;
 
-			if (OrderBy.Contains('.'))
+			if (!string.IsNullOrEmpty(OrderBy) && OrderBy.Contains('.'))
 				throw new InvalidCastException("Nested properties are not supported in OrderBy.");
-
-
 
 			var dtoPropertiesWithAttributes = typeof(TDto).GetProperties()
 							.Select(s => new
 							{
 								s.Name,
+								s.PropertyType,
 								Attr = s.GetCustomAttribute<SortEntityFieldAttribute>()
 							})
-							.Where(w => w.Attr != null);
+							.Select(s => new
+							{
+								s.Name,
+								s.PropertyType,
+								EntityPropName = s.Attr == null ? s.Name : (s.Attr.EntityName == entityType.Name ? s.Attr.PropertyName : s.Attr.SortName)
+							});
 
 			if (!dtoPropertiesWithAttributes.Any())
 				return null;
 
-			var orderParams = OrderBy.Trim().Split(',');
-			for (int i = 0; i < orderParams.Length; i++)
+			string[] orderParams = Array.Empty<string>();
+			Dictionary<string, string> SearchQuery = null;
+
+			if (!string.IsNullOrEmpty(OrderBy))
 			{
-				var propertyFromQueryName = orderParams[i].Trim().Split(" ")[0];
-				var entityField = dtoPropertiesWithAttributes.FirstOrDefault(a => propertyFromQueryName.Equals(a.Name, StringComparison.InvariantCultureIgnoreCase));
-				if (entityField != null)
+				orderParams = OrderBy.Trim().Split(',');
+				for (int i = 0; i < orderParams.Length; i++)
 				{
-					if (entityField.Attr.EntityName == entityType.Name)
-						orderParams[i] = entityField.Attr.PropertyName + " " + orderParams[i].Trim().Split(" ")[1];
-					else
-						orderParams[i] = entityField.Attr.SortName + " " + orderParams[i].Trim().Split(" ")[1];
+					var propertyFromQueryName = orderParams[i].Trim().Split(" ")[0];
+					var entityField = dtoPropertiesWithAttributes.FirstOrDefault(a => propertyFromQueryName.Equals(a.Name, StringComparison.InvariantCultureIgnoreCase));
+
+					if (entityField != null)
+						orderParams[i] = entityField.EntityPropName + " " + orderParams[i].Trim().Split(" ")[1];
 				}
 			}
 
-			return string.Join(",", orderParams);
+			if (!string.IsNullOrEmpty(Search))
+				SearchQuery = dtoPropertiesWithAttributes.Where(w => w.PropertyType == typeof(string)).ToDictionary((key) => key.EntityPropName, (val) => Search);
+
+			return (string.Join(",", orderParams), SearchQuery);
 		}
 	}
 }

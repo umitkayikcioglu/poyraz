@@ -1,5 +1,6 @@
 ﻿using Poyraz.EntityFramework.Abstractions;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -8,6 +9,11 @@ namespace Poyraz.EntityFramework.Specifications.Evaluators
 {
 	internal static class SpecificationOrderEvaluator
 	{
+		private const string ThenByQuery = "ThenBy";
+		private const string OrderByQuery = "OrderBy";
+		private const string DescendingQuery = "Descending";
+		private const string DescQuery = "desc";
+
 		private static IOrderedQueryable<T> ApplyOrder<T>(IQueryable<T> source, string propertyName, bool descending, bool anotherLevel)
 		{
 			ParameterExpression param = Expression.Parameter(typeof(T), string.Empty); // I don't care about some naming
@@ -23,7 +29,7 @@ namespace Poyraz.EntityFramework.Specifications.Evaluators
 			LambdaExpression sort = Expression.Lambda(property, param);
 			MethodCallExpression call = Expression.Call(
 				typeof(Queryable),
-				(!anotherLevel ? "OrderBy" : "ThenBy") + (descending ? "Descending" : string.Empty),
+				(!anotherLevel ? OrderByQuery : ThenByQuery) + (descending ? DescendingQuery : string.Empty),
 				new[] { typeof(T), property.Type },
 				source.Expression,
 				Expression.Quote(sort));
@@ -78,14 +84,14 @@ namespace Poyraz.EntityFramework.Specifications.Evaluators
 
 				if (orderQueryable == null)
 				{
-					if (param.Trim().EndsWith("desc", StringComparison.InvariantCultureIgnoreCase))
+					if (param.Trim().EndsWith(DescQuery, StringComparison.InvariantCultureIgnoreCase))
 						orderQueryable = source.OrderByDescending(propertyFromQueryName);
 					else
 						orderQueryable = source.OrderBy(propertyFromQueryName);
 				}
 				else
 				{
-					if (param.Trim().EndsWith("desc", StringComparison.InvariantCultureIgnoreCase))
+					if (param.Trim().EndsWith(DescQuery, StringComparison.InvariantCultureIgnoreCase))
 						orderQueryable = orderQueryable.ThenByDescending(propertyFromQueryName);
 					else
 						orderQueryable = orderQueryable.ThenBy(propertyFromQueryName);
@@ -97,5 +103,38 @@ namespace Poyraz.EntityFramework.Specifications.Evaluators
 
 			return orderQueryable;
 		}
+
+		internal static Expression<Func<T, bool>> ApplySearch<T>(Dictionary<string, string> entityPropsValues)
+		{
+			// Parameter expression for TEntity
+			var entityParam = Expression.Parameter(typeof(T), "entity");
+
+			// MethodInfo for 'string.Contains' method
+			var containsMethod = typeof(string).GetMethod(nameof(string.Contains), new[] { typeof(string) });
+
+			// Build a criteria expression that checks if each string property is not null or empty
+			Expression criteriaExpr = Expression.Constant(false); // Start with a default 'true' expression
+			foreach (var property in entityPropsValues)
+			{
+				// Split the property path into parts for nested properties
+				string[] parts = property.Key.Split('.');
+				Expression propertyExpr = entityParam;
+				foreach (var part in parts)
+				{
+					// Use Expression.PropertyOrField to support both properties and fields
+					propertyExpr = Expression.PropertyOrField(propertyExpr, part);
+				}
+
+				// Call 'Contains' on the property expression with the substring constant
+				var containsExpr = Expression.Call(propertyExpr, containsMethod, Expression.Constant(property.Value));
+
+				criteriaExpr = Expression.OrElse(criteriaExpr, containsExpr);
+			}
+
+			// Create the final lambda expression
+			var criteria = Expression.Lambda<Func<T, bool>>(criteriaExpr, entityParam);
+			return criteria;
+		}
+
 	}
 }

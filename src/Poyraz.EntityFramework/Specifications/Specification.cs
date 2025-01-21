@@ -1,11 +1,8 @@
 ﻿using Poyraz.EntityFramework.Abstractions;
-using Poyraz.EntityFramework.Attributes;
 using Poyraz.EntityFramework.Utilities;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Linq.Expressions;
-using System.Reflection;
 
 namespace Poyraz.EntityFramework.Specifications
 {
@@ -18,6 +15,7 @@ namespace Poyraz.EntityFramework.Specifications
 
 		public bool IsSplitQuery { get; protected set; }
 		public Expression<Func<TEntity, bool>> Criteria { get; }
+		public Dictionary<string, string> SearchFields { get; private set; }
 		public List<Expression<Func<TEntity, object>>> Includes { get; } = new List<Expression<Func<TEntity, object>>>();
 		public List<string> IncludeStrings { get; } = new List<string>();
 		public Expression<Func<TEntity, object>> OrderBy { get; private set; }
@@ -58,7 +56,12 @@ namespace Poyraz.EntityFramework.Specifications
 
 		public virtual void ApplyQueryStringParameters<TDto>(QueryStringParameters queryStringParameters) where TDto : class
 		{
-			OrderByWithQueryString = queryStringParameters.GetOrderQueryString<TDto>(typeof(TEntity));
+			var result = queryStringParameters.GetOrderAndSearchFromQueryString<TDto>(typeof(TEntity));
+			if (result.HasValue)
+			{
+				OrderByWithQueryString = result.Value.OrderQuery;
+				SearchFields = result.Value.SearchFields;
+			}
 
 			int skip = 0;
 			if (queryStringParameters.PageNumber > 0)

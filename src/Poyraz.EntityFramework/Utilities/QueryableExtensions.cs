@@ -46,7 +46,7 @@ namespace Poyraz.EntityFramework.Utilities
 
 			var result = queryStringParameters.GetOrderAndSearchFromQueryString<TDto>(query.ElementType);
 			// Apply search query string
-			if (result.HasValue)
+			if (result.HasValue && result.Value.SearchFields != null)
 				query = query.Where(SpecificationOrderEvaluator.ApplySearch<TEntity>(result.Value.SearchFields));
 
 			// Get total count

@@ -1,6 +1,7 @@
 ﻿using Poyraz.EntityFramework.Attributes;
 using Poyraz.EntityFramework.Specifications;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -35,19 +36,33 @@ namespace Poyraz.EntityFramework.Utilities
 			if (!string.IsNullOrEmpty(OrderBy) && OrderBy.Contains('.'))
 				throw new InvalidCastException("Nested properties are not supported in OrderBy.");
 
-			var dtoPropertiesWithAttributes = typeof(TDto).GetProperties()
-							.Select(s => new
-							{
-								s.Name,
-								s.PropertyType,
-								Attr = s.GetCustomAttribute<SortEntityFieldAttribute>()
-							})
-							.Select(s => new
-							{
-								s.Name,
-								s.PropertyType,
-								EntityPropName = s.Attr == null ? s.Name : (s.Attr.EntityName == entityType.Name ? s.Attr.PropertyName : s.Attr.SortName)
-							});
+			// Generate a unique cache key based on TDto and entityType
+			string cacheKey = $"{typeof(TDto).FullName}:{entityType.FullName}";
+
+			// Retrieve or add the mapping to the cache
+			var dtoPropertiesWithAttributes = Cache.GetOrAdd(cacheKey, key =>
+			{
+				var entityProps = entityType.GetProperties();
+
+				return typeof(TDto).GetProperties()
+					.Select(s => new
+					{
+						s.Name,
+						s.PropertyType,
+						Attr = s.GetCustomAttribute<SortEntityFieldAttribute>()
+					})
+					.Where(w => w.Attr != null || entityProps.Any(c => c.Name == w.Name))
+					.Select(s => new DtoPropertyMapping
+					{
+						Name = s.Name,
+						PropertyType = s.PropertyType,
+						EntityPropName = s.Attr == null
+							? s.Name
+							: (s.Attr.EntityName == entityType.Name ? s.Attr.PropertyName : s.Attr.SortName),
+						EntityPropType = s.Attr == null ? entityProps.FirstOrDefault(c => c.Name == s.Name)?.PropertyType : s.PropertyType
+					})
+					.ToList();
+			});
 
 			if (!dtoPropertiesWithAttributes.Any())
 				return null;
@@ -69,9 +84,19 @@ namespace Poyraz.EntityFramework.Utilities
 			}
 
 			if (!string.IsNullOrEmpty(Search))
-				SearchQuery = dtoPropertiesWithAttributes.Where(w => w.PropertyType == typeof(string)).ToDictionary((key) => key.EntityPropName, (val) => Search);
+				SearchQuery = dtoPropertiesWithAttributes.Where(w => w.EntityPropType == typeof(string)).ToDictionary((key) => key.EntityPropName, (val) => Search);
 
 			return (string.Join(",", orderParams), SearchQuery);
+		}
+
+		// Static cache to store reflection results
+		private static readonly ConcurrentDictionary<string, List<DtoPropertyMapping>> Cache = new ConcurrentDictionary<string, List<DtoPropertyMapping>>();
+		private class DtoPropertyMapping
+		{
+			public string Name { get; set; }
+			public Type PropertyType { get; set; }
+			public string EntityPropName { get; set; }
+			public Type EntityPropType { get; set; }
 		}
 	}
 }

@@ -4,6 +4,7 @@ using Poyraz.EntityFramework.Specifications.Evaluators;
 using Poyraz.Helpers.Primitives;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
@@ -66,6 +67,78 @@ namespace Poyraz.EntityFramework.Utilities
 			var resultDtoList = await query.Select(projection).ToArrayAsync();
 
 			return new ResultList<TDto>(resultDtoList, totalCount);
+		}
+
+		public static IQueryable<T> ApplyDateRangeFilter<T, TProperty>(this IQueryable<T> query, DateRange range, Expression<Func<T, TProperty>> selector)
+		{
+			if (range == null)
+				return query;
+
+			bool nullableType = Nullable.GetUnderlyingType(typeof(TProperty)) != null;
+			var propertyType = Nullable.GetUnderlyingType(typeof(TProperty)) ?? typeof(TProperty);
+			var memberExpression = selector.Body;
+
+			if (propertyType == typeof(DateOnly))
+			{
+				if (range.Start.HasValue)
+				{
+					query = ApplyComparisonFilter(query, memberExpression, range.Start.Value, nullableType, true, selector.Parameters);
+				}
+
+				if (range.End.HasValue)
+				{
+					query = ApplyComparisonFilter(query, memberExpression, range.End.Value, nullableType, false, selector.Parameters);
+				}
+			}
+			else if (propertyType == typeof(DateTime))
+			{
+				if (range.Start.HasValue)
+				{
+					var startValue = range.Start.Value.ToDateTime(TimeOnly.MinValue);
+					query = ApplyComparisonFilter(query, memberExpression, startValue, nullableType, true, selector.Parameters);
+				}
+
+				if (range.End.HasValue)
+				{
+					var endValue = range.End.Value.ToDateTime(TimeOnly.MaxValue);
+					query = ApplyComparisonFilter(query, memberExpression, endValue, nullableType, false, selector.Parameters);
+				}
+			}
+			else
+			{
+				throw new InvalidOperationException("Unsupported property type.");
+			}
+
+			return query;
+		}
+
+		private static IQueryable<T> ApplyComparisonFilter<T, TValue>(IQueryable<T> query, Expression memberExpression, TValue value, bool isNullable, bool isGreaterThanOrEqual, ReadOnlyCollection<ParameterExpression> parameters)
+		{
+			Expression finalExpr;
+			var constantExpr = Expression.Constant(value, typeof(TValue));
+
+			if (isNullable)
+			{
+				var hasValueExpr = Expression.Property(memberExpression, "HasValue");
+				var valueExpr = Expression.Property(memberExpression, "Value");
+
+				Expression comparisonExpr;
+				if (isGreaterThanOrEqual)
+					comparisonExpr = Expression.GreaterThanOrEqual(valueExpr, constantExpr);
+				else
+					comparisonExpr = Expression.LessThanOrEqual(valueExpr, constantExpr);
+
+				finalExpr = Expression.AndAlso(hasValueExpr, comparisonExpr);
+			}
+			else
+			{
+				if (isGreaterThanOrEqual)
+					finalExpr = Expression.GreaterThanOrEqual(memberExpression, constantExpr);
+				else
+					finalExpr = Expression.LessThanOrEqual(memberExpression, constantExpr);
+			}
+
+			return query.Where(Expression.Lambda<Func<T, bool>>(finalExpr, parameters));
 		}
 
 	}

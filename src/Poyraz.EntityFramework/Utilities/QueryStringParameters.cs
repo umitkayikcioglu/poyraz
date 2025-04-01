@@ -99,4 +99,10 @@ namespace Poyraz.EntityFramework.Utilities
 			public Type EntityPropType { get; set; }
 		}
 	}
+
+	public class DateRange
+	{
+		public DateOnly? Start { get; set; }
+		public DateOnly? End { get; set; }
+	}
 }

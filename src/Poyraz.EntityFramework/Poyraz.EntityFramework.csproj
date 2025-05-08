@@ -31,7 +31,7 @@
 	</ItemGroup>
 
 	<ItemGroup Condition=" '$(Configuration)' == 'Release' ">
-		<PackageReference Include="Poyraz.Helpers.Primitives" Version="[8.0.0,)">
+		<PackageReference Include="Poyraz.Helpers.Primitives" Version="[8.0.4,)">
 			<NoWarn>NU1603</NoWarn>
 			<NoWarn>NU1604</NoWarn>
 		</PackageReference>

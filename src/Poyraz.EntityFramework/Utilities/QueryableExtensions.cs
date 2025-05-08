@@ -17,6 +17,8 @@ namespace Poyraz.EntityFramework.Utilities
 			where TEntity : IEntity
 			where TDto : class
 		{
+			Expression<Func<TEntity, bool>>? searchFieldsExp = null;
+			Expression<Func<TEntity, bool>>? dynamicSearchExp = null;
 
 			// Apply custom search filter
 			if (!string.IsNullOrWhiteSpace(queryStringParameters.Search) && searchFields != null && searchFields.Count > 0)
@@ -40,15 +42,35 @@ namespace Poyraz.EntityFramework.Utilities
 
 				if (containsExpression != null)
 				{
-					var lambda = Expression.Lambda<Func<TEntity, bool>>(containsExpression, parameter);
-					query = query.Where(lambda);
+					searchFieldsExp = Expression.Lambda<Func<TEntity, bool>>(containsExpression, parameter);
 				}
 			}
 
 			var result = queryStringParameters.GetOrderAndSearchFromQueryString<TDto>(query.ElementType);
 			// Apply search query string
 			if (result.HasValue && result.Value.SearchFields != null)
-				query = query.Where(SpecificationOrderEvaluator.ApplySearch<TEntity>(result.Value.SearchFields));
+			{
+				dynamicSearchExp = SpecificationOrderEvaluator.ApplySearch<TEntity>(result.Value.SearchFields);
+			}
+
+			if (searchFieldsExp != null && dynamicSearchExp != null)
+			{
+				var parameter = Expression.Parameter(typeof(TEntity), "w");
+				var body = Expression.OrElse(
+					Expression.Invoke(searchFieldsExp, parameter),
+					Expression.Invoke(dynamicSearchExp, parameter)
+				);
+
+				searchFieldsExp = Expression.Lambda<Func<TEntity, bool>>(body, parameter);
+			}
+			else if (searchFieldsExp == null && dynamicSearchExp != null)
+			{
+				searchFieldsExp = dynamicSearchExp;
+			}
+
+
+			if (searchFieldsExp != null)
+				query = query.Where(searchFieldsExp);
 
 			// Get total count
 			int totalCount = await query.CountAsync();

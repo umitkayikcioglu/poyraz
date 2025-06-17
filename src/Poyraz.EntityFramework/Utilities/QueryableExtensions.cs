@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace Poyraz.EntityFramework.Utilities
@@ -18,74 +19,85 @@ namespace Poyraz.EntityFramework.Utilities
 			where TDto : class
 		{
 			Expression<Func<TEntity, bool>>? searchFieldsExp = null;
-			Expression<Func<TEntity, bool>>? dynamicSearchExp = null;
 
-			// Apply custom search filter
-			if (!string.IsNullOrWhiteSpace(queryStringParameters.Search) && searchFields != null && searchFields.Count > 0)
+			// Apply custom search filter using EF.Functions.Like
+			if (!string.IsNullOrWhiteSpace(queryStringParameters.Search) && searchFields?.Count > 0)
 			{
-				// Combine fields dynamically
 				var parameter = Expression.Parameter(typeof(TEntity), "w");
-				var searchValue = Expression.Constant(queryStringParameters.Search);
+				var searchPattern = Expression.Constant($"%{queryStringParameters.Search}%");
+				var efFunctions = Expression.Property(null, typeof(EF).GetProperty(nameof(EF.Functions))!);
 
-				Expression? containsExpression = null;
+				Expression? likeExpression = null;
 
 				foreach (var field in searchFields)
 				{
-					// Generate: w.Field.Contains(queryStringParameters.Search)
-					var fieldExpression = Expression.Invoke(field, parameter);
-					var containsCall = Expression.Call(fieldExpression, "Contains", null, searchValue);
+					MemberExpression? member = GetMemberAccess(parameter, field.Body);
 
-					containsExpression = containsExpression == null
-						? containsCall
-						: Expression.OrElse(containsExpression, containsCall);
+					if (member == null)
+						continue;
+
+					var likeMethod = typeof(DbFunctionsExtensions).GetMethod(nameof(DbFunctionsExtensions.Like), new[] { typeof(DbFunctions), typeof(string), typeof(string) });
+
+					var likeCall = Expression.Call(likeMethod!, efFunctions, member, searchPattern);
+
+					likeExpression = likeExpression == null
+						? likeCall
+						: Expression.OrElse(likeExpression, likeCall);
 				}
 
-				if (containsExpression != null)
+				if (likeExpression != null)
 				{
-					searchFieldsExp = Expression.Lambda<Func<TEntity, bool>>(containsExpression, parameter);
+					searchFieldsExp = Expression.Lambda<Func<TEntity, bool>>(likeExpression, parameter);
 				}
+			}
+
+			if (searchFields == null && string.IsNullOrWhiteSpace(queryStringParameters.FullTextSearch)
+				&& !string.IsNullOrWhiteSpace(queryStringParameters.Search))
+			{
+				queryStringParameters.FullTextSearch = queryStringParameters.Search;
 			}
 
 			var result = queryStringParameters.GetOrderAndSearchFromQueryString<TDto>(query.ElementType);
-			// Apply search query string
-			if (result.HasValue && result.Value.SearchFields != null)
-			{
-				dynamicSearchExp = SpecificationOrderEvaluator.ApplySearch<TEntity>(result.Value.SearchFields);
-			}
 
-			if (searchFieldsExp != null && dynamicSearchExp != null)
+			if (!string.IsNullOrWhiteSpace(queryStringParameters.FullTextSearch))
 			{
-				var parameter = Expression.Parameter(typeof(TEntity), "w");
-				var body = Expression.OrElse(
-					Expression.Invoke(searchFieldsExp, parameter),
-					Expression.Invoke(dynamicSearchExp, parameter)
-				);
+				Expression<Func<TEntity, bool>>? dynamicSearchExp = null;
+				if (result?.SearchFields != null)
+				{
+					dynamicSearchExp = SpecificationOrderEvaluator.ApplySearch<TEntity>(result.Value.SearchFields);
+				}
 
-				searchFieldsExp = Expression.Lambda<Func<TEntity, bool>>(body, parameter);
+				if (searchFieldsExp != null && dynamicSearchExp != null)
+				{
+					// Merge expressions manually to avoid Invoke
+					var param = Expression.Parameter(typeof(TEntity), "w");
+					var left = RebindParameter(searchFieldsExp.Body, searchFieldsExp.Parameters[0], param);
+					var right = RebindParameter(dynamicSearchExp.Body, dynamicSearchExp.Parameters[0], param);
+					var merged = Expression.OrElse(left, right);
+					searchFieldsExp = Expression.Lambda<Func<TEntity, bool>>(merged, param);
+				}
+				else if (searchFieldsExp == null && dynamicSearchExp != null)
+				{
+					searchFieldsExp = dynamicSearchExp;
+				}
 			}
-			else if (searchFieldsExp == null && dynamicSearchExp != null)
-			{
-				searchFieldsExp = dynamicSearchExp;
-			}
-
 
 			if (searchFieldsExp != null)
 				query = query.Where(searchFieldsExp);
 
-			// Get total count
 			int totalCount = await query.CountAsync();
 
-			// Apply order query string
 			if (result.HasValue)
 				query = SpecificationOrderEvaluator.ApplySort(query, result.Value.OrderQuery);
 
-			// Apply paging
-			int skip = 0;
 			if (queryStringParameters.PageNumber > 0)
-				skip = (queryStringParameters.PageNumber - 1) * queryStringParameters.PageSize;
-			query = query.Skip(skip).Take(queryStringParameters.PageSize);
+			{
+				int skip = (queryStringParameters.PageNumber - 1) * queryStringParameters.PageSize;
+				query = query.Skip(skip);
+			}
 
-			// convert to dto model
+			query = query.Take(queryStringParameters.PageSize);
+
 			var resultDtoList = await query.Select(projection).ToArrayAsync();
 
 			return new ResultList<TDto>(resultDtoList, totalCount);
@@ -161,6 +173,56 @@ namespace Poyraz.EntityFramework.Utilities
 			}
 
 			return query.Where(Expression.Lambda<Func<T, bool>>(finalExpr, parameters));
+		}
+
+		private static Expression RebindParameter(Expression expression, ParameterExpression source, ParameterExpression target)
+		{
+			return new RebindVisitor(source, target).Visit(expression)!;
+		}
+
+		private class RebindVisitor : ExpressionVisitor
+		{
+			private readonly ParameterExpression _source;
+			private readonly ParameterExpression _target;
+
+			public RebindVisitor(ParameterExpression source, ParameterExpression target)
+			{
+				_source = source;
+				_target = target;
+			}
+
+			protected override Expression VisitParameter(ParameterExpression node)
+			{
+				return node == _source ? _target : base.VisitParameter(node);
+			}
+		}
+
+		private static MemberExpression? GetMemberAccess(ParameterExpression parameter, Expression body)
+		{
+			if (body is MemberExpression memberExpr)
+			{
+				var members = new Stack<MemberInfo>();
+				while (memberExpr != null)
+				{
+					members.Push(memberExpr.Member);
+					memberExpr = memberExpr.Expression as MemberExpression;
+				}
+
+				Expression current = parameter;
+				while (members.Count > 0)
+				{
+					current = Expression.PropertyOrField(current, members.Pop().Name);
+				}
+
+				return (MemberExpression)current;
+			}
+
+			if (body is UnaryExpression unary && unary.Operand is MemberExpression unaryMember)
+			{
+				return GetMemberAccess(parameter, unaryMember);
+			}
+
+			return null;
 		}
 
 	}

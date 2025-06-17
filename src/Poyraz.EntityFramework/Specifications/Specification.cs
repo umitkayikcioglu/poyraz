@@ -54,22 +54,25 @@ namespace Poyraz.EntityFramework.Specifications
 			OrderByDescending = orderByDescendingExpression;
 		}
 
-		public virtual void ApplyQueryStringParameters<TDto>(QueryStringParameters queryStringParameters) where TDto : class
-		{
-			var result = queryStringParameters.GetOrderAndSearchFromQueryString<TDto>(typeof(TEntity));
-			if (result.HasValue)
-			{
-				OrderByWithQueryString = result.Value.OrderQuery;
-				SearchFields = result.Value.SearchFields;
-			}
+        public virtual void ApplyQueryStringParameters<TDto>(QueryStringParameters queryStringParameters, bool useSearchAsFallback = true) where TDto : class
+        {
+            if (useSearchAsFallback && string.IsNullOrWhiteSpace(queryStringParameters.FullTextSearch))
+                queryStringParameters.FullTextSearch = queryStringParameters.Search;
 
-			int skip = 0;
-			if (queryStringParameters.PageNumber > 0)
-				skip = (queryStringParameters.PageNumber - 1) * queryStringParameters.PageSize;
+            var result = queryStringParameters.GetOrderAndSearchFromQueryString<TDto>(typeof(TEntity));
+            if (result.HasValue)
+            {
+                OrderByWithQueryString = result.Value.OrderQuery;
+                SearchFields = result.Value.SearchFields;
+            }
 
-			ApplyPaging(skip, queryStringParameters.PageSize);
-		}
+            int skip = 0;
+            if (queryStringParameters.PageNumber > 0)
+                skip = (queryStringParameters.PageNumber - 1) * queryStringParameters.PageSize;
 
+            ApplyPaging(skip, queryStringParameters.PageSize);
+        }
+    
 		public virtual void UndoPaging()
 		{
 			IsPagingEnabled = false;

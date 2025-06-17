@@ -20,6 +20,7 @@ namespace Poyraz.EntityFramework.Utilities
 		}
 		public string OrderBy { get; set; }
 		public string Search { get; set; }
+		public string FullTextSearch { get; set; }
 
 		/// <summary>
 		/// Generates an order query string by mapping DTO properties to entity properties.
@@ -30,7 +31,7 @@ namespace Poyraz.EntityFramework.Utilities
 		internal (string OrderQuery, Dictionary<string, string> SearchFields)? GetOrderAndSearchFromQueryString<TDto>(Type entityType)
 			where TDto : class
 		{
-			if (string.IsNullOrWhiteSpace(OrderBy) && string.IsNullOrEmpty(Search))
+			if (string.IsNullOrWhiteSpace(OrderBy) && string.IsNullOrEmpty(FullTextSearch))
 				return null;
 
 			if (!string.IsNullOrEmpty(OrderBy) && OrderBy.Contains('.'))
@@ -75,16 +76,20 @@ namespace Poyraz.EntityFramework.Utilities
 				orderParams = OrderBy.Trim().Split(',');
 				for (int i = 0; i < orderParams.Length; i++)
 				{
-					var propertyFromQueryName = orderParams[i].Trim().Split(" ")[0];
+					var parts = orderParams[i].Trim().Split(" ");
+					var propertyFromQueryName = parts[0];
+					var direction = parts.Length > 1 ? parts[1] : "asc";
 					var entityField = dtoPropertiesWithAttributes.FirstOrDefault(a => propertyFromQueryName.Equals(a.Name, StringComparison.InvariantCultureIgnoreCase));
 
 					if (entityField != null)
-						orderParams[i] = entityField.EntityPropName + " " + orderParams[i].Trim().Split(" ")[1];
+						orderParams[i] = entityField.EntityPropName + " " + direction;
 				}
 			}
 
-			if (!string.IsNullOrEmpty(Search))
-				SearchQuery = dtoPropertiesWithAttributes.Where(w => w.EntityPropType == typeof(string)).ToDictionary((key) => key.EntityPropName, (val) => Search);
+			if (!string.IsNullOrEmpty(FullTextSearch))
+				SearchQuery = dtoPropertiesWithAttributes
+					.Where(w => w.EntityPropType == typeof(string) && !string.IsNullOrEmpty(w.EntityPropName))
+					.ToDictionary(k => k.EntityPropName, _ => FullTextSearch);
 
 			return (string.Join(",", orderParams), SearchQuery);
 		}

@@ -1,4 +1,5 @@
-﻿using Poyraz.EntityFramework.Abstractions;
+﻿using Microsoft.EntityFrameworkCore;
+using Poyraz.EntityFramework.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -106,34 +107,30 @@ namespace Poyraz.EntityFramework.Specifications.Evaluators
 
 		internal static Expression<Func<T, bool>> ApplySearch<T>(Dictionary<string, string> entityPropsValues)
 		{
-			// Parameter expression for TEntity
 			var entityParam = Expression.Parameter(typeof(T), "entity");
+			var efFunctions = Expression.Property(null, typeof(EF).GetProperty(nameof(EF.Functions))!);
 
-			// MethodInfo for 'string.Contains' method
-			var containsMethod = typeof(string).GetMethod(nameof(string.Contains), new[] { typeof(string) });
+			var likeMethod = typeof(DbFunctionsExtensions).GetMethod(nameof(DbFunctionsExtensions.Like), new[] { typeof(DbFunctions), typeof(string), typeof(string) });
 
-			// Build a criteria expression that checks if each string property is not null or empty
-			Expression criteriaExpr = Expression.Constant(false); // Start with a default 'true' expression
+			Expression criteriaExpr = Expression.Constant(false);
+
 			foreach (var property in entityPropsValues)
 			{
-				// Split the property path into parts for nested properties
 				string[] parts = property.Key.Split('.');
 				Expression propertyExpr = entityParam;
 				foreach (var part in parts)
 				{
-					// Use Expression.PropertyOrField to support both properties and fields
 					propertyExpr = Expression.PropertyOrField(propertyExpr, part);
 				}
 
-				// Call 'Contains' on the property expression with the substring constant
-				var containsExpr = Expression.Call(propertyExpr, containsMethod, Expression.Constant(property.Value));
+				var patternExpr = Expression.Constant($"%{property.Value}%");
 
-				criteriaExpr = Expression.OrElse(criteriaExpr, containsExpr);
+				var likeExpr = Expression.Call(likeMethod!, efFunctions, propertyExpr, patternExpr);
+
+				criteriaExpr = Expression.OrElse(criteriaExpr, likeExpr);
 			}
 
-			// Create the final lambda expression
-			var criteria = Expression.Lambda<Func<T, bool>>(criteriaExpr, entityParam);
-			return criteria;
+			return Expression.Lambda<Func<T, bool>>(criteriaExpr, entityParam);
 		}
 
 	}

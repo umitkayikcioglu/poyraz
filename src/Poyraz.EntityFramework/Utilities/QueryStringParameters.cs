@@ -50,7 +50,8 @@ namespace Poyraz.EntityFramework.Utilities
 					{
 						s.Name,
 						s.PropertyType,
-						Attr = s.GetCustomAttribute<SortEntityFieldAttribute>()
+						Attr = s.GetCustomAttribute<SortEntityFieldAttribute>(),
+						NonSearchAttr = s.GetCustomAttribute<NonSearchAttribute>() != null
 					})
 					.Where(w => w.Attr != null || entityProps.Any(c => c.Name == w.Name))
 					.Select(s => new DtoPropertyMapping
@@ -60,7 +61,8 @@ namespace Poyraz.EntityFramework.Utilities
 						EntityPropName = s.Attr == null
 							? s.Name
 							: (s.Attr.EntityName == entityType.Name ? s.Attr.PropertyName : s.Attr.SortName),
-						EntityPropType = s.Attr == null ? entityProps.FirstOrDefault(c => c.Name == s.Name)?.PropertyType : s.PropertyType
+						EntityPropType = s.Attr == null ? entityProps.FirstOrDefault(c => c.Name == s.Name)?.PropertyType : s.PropertyType,
+						NonSearch = s.NonSearchAttr
 					})
 					.ToList();
 			});
@@ -88,7 +90,7 @@ namespace Poyraz.EntityFramework.Utilities
 
 			if (!string.IsNullOrEmpty(FullTextSearch))
 				SearchQuery = dtoPropertiesWithAttributes
-					.Where(w => w.EntityPropType == typeof(string) && !string.IsNullOrEmpty(w.EntityPropName))
+					.Where(w => w.EntityPropType == typeof(string) && !string.IsNullOrEmpty(w.EntityPropName) && !w.NonSearch)
 					.ToDictionary(k => k.EntityPropName, _ => FullTextSearch);
 
 			return (string.Join(",", orderParams), SearchQuery);
@@ -102,6 +104,7 @@ namespace Poyraz.EntityFramework.Utilities
 			public Type PropertyType { get; set; }
 			public string EntityPropName { get; set; }
 			public Type EntityPropType { get; set; }
+			public bool NonSearch { get; set; }
 		}
 	}
 

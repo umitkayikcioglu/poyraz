@@ -23,4 +23,10 @@ namespace Poyraz.EntityFramework.Attributes
 		{
 		}
 	}
+
+	[AttributeUsage(AttributeTargets.Property)]
+	public sealed class NonSearchAttribute : Attribute
+	{
+
+	}
 }

@@ -14,6 +14,12 @@ namespace Poyraz.EntityFramework.Utilities
 {
 	public static class QueryableExtensions
 	{
+		public static IQueryable<TEntity> ApplySpecification<TEntity>(this IQueryable<TEntity> query, ISpecification<TEntity> specification)
+			where TEntity : class, IEntity
+		{
+			return SpecificationEvaluator<TEntity>.GetQuery(query, specification);
+		}
+
 		public static async Task<ResultList<TDto>> ApplyQueryStringParametersAsync<TEntity, TDto>(this IQueryable<TEntity> query, QueryStringParameters queryStringParameters, Expression<Func<TEntity, TDto>> projection, List<Expression<Func<TEntity, string>>> searchFields = null)
 			where TEntity : IEntity
 			where TDto : class

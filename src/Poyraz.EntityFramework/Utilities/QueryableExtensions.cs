@@ -8,6 +8,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Poyraz.EntityFramework.Utilities
@@ -20,7 +21,7 @@ namespace Poyraz.EntityFramework.Utilities
 			return SpecificationEvaluator<TEntity>.GetQuery(query, specification);
 		}
 
-		public static async Task<ResultList<TDto>> ApplyQueryStringParametersAsync<TEntity, TDto>(this IQueryable<TEntity> query, QueryStringParameters queryStringParameters, Expression<Func<TEntity, TDto>> projection, List<Expression<Func<TEntity, string>>> searchFields = null)
+		public static async Task<ResultList<TDto>> ApplyQueryStringParametersAsync<TEntity, TDto>(this IQueryable<TEntity> query, QueryStringParameters queryStringParameters, Expression<Func<TEntity, TDto>> projection, List<Expression<Func<TEntity, string>>> searchFields = null, CancellationToken cancellationToken = default)
 			where TEntity : IEntity
 			where TDto : class
 		{
@@ -91,7 +92,7 @@ namespace Poyraz.EntityFramework.Utilities
 			if (searchFieldsExp != null)
 				query = query.Where(searchFieldsExp);
 
-			int totalCount = await query.CountAsync();
+			int totalCount = await query.CountAsync(cancellationToken);
 
 			if (result.HasValue)
 				query = SpecificationOrderEvaluator.ApplySort(query, result.Value.OrderQuery);
@@ -104,7 +105,7 @@ namespace Poyraz.EntityFramework.Utilities
 
 			query = query.Take(queryStringParameters.PageSize);
 
-			var resultDtoList = await query.Select(projection).ToArrayAsync();
+			var resultDtoList = await query.Select(projection).ToArrayAsync(cancellationToken);
 
 			return new ResultList<TDto>(resultDtoList, totalCount);
 		}

@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Poyraz.EntityFramework.Services
@@ -48,25 +49,25 @@ namespace Poyraz.EntityFramework.Services
 			DBContext.Entry(entity).State = EntityState.Modified;
 		}
 
-		public async Task<T> SingleAsync(ISpecification<T> specification)
+		public async Task<T> SingleAsync(ISpecification<T> specification, CancellationToken cancellationToken = default)
 		{
-			return await ApplySpecification(specification).SingleAsync();
+			return await ApplySpecification(specification).SingleAsync(cancellationToken);
 		}
 
-		public async Task<T> FindAsync(Expression<Func<T, bool>> predicate)
+		public async Task<T> FindAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
 		{
-			return await DBSet.FirstOrDefaultAsync(predicate);
+			return await DBSet.FirstOrDefaultAsync(predicate, cancellationToken);
 		}
 
-		public async Task<T> FindByIdAsync(object id)
+		public async Task<T> FindByIdAsync(object id, CancellationToken cancellationToken = default)
 		{
-			return await DBSet.FindAsync(id);
+			return await DBSet.FindAsync(id, cancellationToken);
 		}
 
-		public async Task<T> FindByRowGuidAsync(Guid rowGuid)
+		public async Task<T> FindByRowGuidAsync(Guid rowGuid, CancellationToken cancellationToken = default)
 		{
 			if (typeof(IEntityWithExternalId).IsAssignableFrom(typeof(T)))
-				return await DBSet.FirstOrDefaultAsync(f => ((IEntityWithExternalId)f).RowGuid == rowGuid);
+				return await DBSet.FirstOrDefaultAsync(f => ((IEntityWithExternalId)f).RowGuid == rowGuid, cancellationToken);
 
 			throw new InvalidOperationException("T must implement IEntityWithExternalId to use this method.");
 		}

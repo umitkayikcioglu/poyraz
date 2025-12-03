@@ -39,7 +39,7 @@ namespace Poyraz.EntityFramework.Specifications.Evaluators
 				query = query.OrderByDescending(specification.OrderByDescending);
 			}
 
-			if (!string.IsNullOrEmpty(specification.OrderByWithQueryString))
+			if (!string.IsNullOrEmpty(specification.OrderByWithQueryString) || (specification.OrderBy == null && specification.OrderByDescending == null))
 			{
 				query = query.ApplySort(specification.OrderByWithQueryString);
 			}

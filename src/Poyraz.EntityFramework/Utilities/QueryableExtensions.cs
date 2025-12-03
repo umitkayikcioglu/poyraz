@@ -94,8 +94,7 @@ namespace Poyraz.EntityFramework.Utilities
 
 			int totalCount = await query.CountAsync(cancellationToken);
 
-			if (result.HasValue)
-				query = SpecificationOrderEvaluator.ApplySort(query, result.Value.OrderQuery);
+			query = SpecificationOrderEvaluator.ApplySort(query, result.HasValue ? result.Value.OrderQuery : string.Empty);
 
 			if (queryStringParameters.PageNumber > 0)
 			{

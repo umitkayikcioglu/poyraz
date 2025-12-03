@@ -54,11 +54,23 @@ namespace Poyraz.EntityFramework.Specifications.Evaluators
 			return ApplyOrder(source, propertyName, true, true);
 		}
 
+		/// <summary>
+		/// Applies sorting to the source based on the order query string.
+		/// Default sorting is applied if the order query string is null or empty.
+		/// </summary>
+		/// <typeparam name="T"></typeparam>
+		/// <param name="source"></param>
+		/// <param name="orderQueryString"></param>
+		/// <returns></returns>
 		internal static IOrderedQueryable<T> ApplySort<T>(this IQueryable<T> source, string orderQueryString) where T : IEntity
 		{
-			if (string.IsNullOrWhiteSpace(orderQueryString) && typeof(T).IsAssignableTo(typeof(ISimpleAuditable)))
+			// Default ordering
+			if (string.IsNullOrWhiteSpace(orderQueryString))
 			{
-				return source.OrderBy(nameof(ISimpleAuditable.CreatedAt));
+				if (typeof(T).IsAssignableTo(typeof(ISimpleAuditable)))
+					return source.OrderBy(nameof(ISimpleAuditable.CreatedAt));
+				else
+					return source.OrderBy(x => x.Id);
 			}
 
 			var orderParams = orderQueryString.Trim().Split(',');

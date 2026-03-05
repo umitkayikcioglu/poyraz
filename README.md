@@ -1,80 +1,119 @@
 # Poyraz
 
-Poyraz is a suite of libraries designed to streamline and enhance your .NET development experience. It includes the following packages:
+Poyraz is a suite of .NET libraries for **functional error handling** and **Entity Framework Core abstractions**. It provides the Result Pattern for safe error propagation without exceptions, and clean Repository/UnitOfWork/Specification patterns for data access.
 
-- **Poyraz.EntityFramework**: Provides additional abstractions such as Repository and UnitOfWork patterns, along with support for the Specification Pattern.
+## Packages
 
-  [![](https://img.shields.io/nuget/v/Poyraz.EntityFramework.svg?logo=nuget)](https://www.nuget.org/packages/Poyraz.EntityFramework)
-![](https://img.shields.io/nuget/dt/Poyraz.EntityFramework.svg?logo=nuget&color=yellow)
-![](https://github.com/umitkayikcioglu/poyraz/workflows/Poyraz.EntityFramework/badge.svg)
-- **Poyraz.Helpers.Primitives**: Contains helper classes and patterns such as `Result`, `Error`, and `ResultList` for functional programming and error handling.
+### Poyraz.Helpers.Primitives
 
-  [![](https://img.shields.io/nuget/v/Poyraz.Helpers.Primitives.svg?logo=nuget)](https://www.nuget.org/packages/Poyraz.Helpers.Primitives)
+[![](https://img.shields.io/nuget/v/Poyraz.Helpers.Primitives.svg?logo=nuget)](https://www.nuget.org/packages/Poyraz.Helpers.Primitives)
 ![](https://img.shields.io/nuget/dt/Poyraz.Helpers.Primitives.svg?logo=nuget&color=yellow)
-![](https://github.com/umitkayikcioglu/poyraz/workflows/Poyraz.Helpers.Primitives/badge.svg)
 
----
+Functional error handling via the Result Pattern. Return `Result` / `Result<T>` instead of throwing exceptions.
 
-# Poyraz.EntityFramework
-
-Poyraz.EntityFramework is a library designed to enhance your Entity Framework Core experience by providing additional abstractions such as Repository and UnitOfWork patterns, along with support for Specification Pattern.
-
----
-
-## Features
-
-- **Repository Pattern**: Simplifies CRUD operations with a generic repository interface and implementation.
-- **UnitOfWork Pattern**: Manages transactions and ensures atomic operations.
-- **Specification Pattern**: Provides a clean way to build and execute complex queries.
-- **Dependency Injection Support**: Easily integrate with ASP.NET Core's DI container.
-
----
-
-## Installation
-
-Add the NuGet package to your project:
+**Key types:** `Result`, `Result<T>`, `ResultList<TItem>`, `Error`
 
 ```bash
-Install-Package Poyraz.EntityFramework
+dotnet add package Poyraz.Helpers.Primitives
 ```
 
+```csharp
+using Poyraz.Helpers.Primitives;
+
+// Return errors without exceptions
+public Result<User> GetUser(int id)
+{
+    var user = _repo.FindById(id);
+    if (user == null)
+        return Result.Failure<User>(new Error("User.NotFound"));
+
+    return user; // implicit conversion to Result<User>
+}
+
+// Validate with Ensure — collects all errors
+var validated = Result.Ensure(email,
+    (v => !string.IsNullOrEmpty(v), new Error("Email.Empty")),
+    (v => v.Contains('@'),          new Error("Email.InvalidFormat"))
+);
+
+// Chain operations with OnSuccess / Map
+Result<UserDto> dto = GetUser(id)
+    .Ensure(u => u.IsActive, new Error("User.Inactive"))
+    .Map(u => new UserDto { Name = u.Name });
+
+// Paginated results
+var list = new ResultList<UserDto>(pageItems, totalCount: 500);
+```
+
+📖 [Full documentation →](src/Poyraz.Helpers.Primitives/README.md)
+
 ---
 
-## Usage
+### Poyraz.EntityFramework
 
-Refer to the combined usage section for examples.
+[![](https://img.shields.io/nuget/v/Poyraz.EntityFramework.svg?logo=nuget)](https://www.nuget.org/packages/Poyraz.EntityFramework)
+![](https://img.shields.io/nuget/dt/Poyraz.EntityFramework.svg?logo=nuget&color=yellow)
 
----
+Repository, UnitOfWork, and Specification patterns for Entity Framework Core with built-in dynamic sorting, searching, and pagination from query strings.
 
-# Poyraz.Helpers.Primitives
-
-Poyraz.Helpers.Primitives provides functional programming tools and error handling mechanisms for .NET applications. It simplifies common patterns such as error handling, validation, and method chaining.
-
----
-
-## Features
-
-- **Result Pattern**: Encapsulates operation results with success/failure states and error details.
-- **Error Handling**: Provides a standardized way to define and handle errors using the `Error` class.
-- **ResultList**: A convenient wrapper for paginated results with metadata.
-- **Extension Methods**: Enhances the usability of `Result` with chaining and transformation methods.
-- **Serialization**: Supports JSON serialization for errors and results.
-
----
-
-## Installation
-
-Add the NuGet package to your project:
+**Key types:** `IUnitOfWork`, `IRepository<T>`, `Specification<T>`, `QueryStringParameters`, `QueryableExtensions`
 
 ```bash
-Install-Package Poyraz.Helpers.Primitives
+dotnet add package Poyraz.EntityFramework
 ```
 
----
+```csharp
+using Poyraz.EntityFramework;
+using Poyraz.EntityFramework.Abstractions;
+using Poyraz.EntityFramework.Specifications;
 
-## Usage
+// 1. Register in DI
+builder.Services.AddUnitOfWork<MyDbContext>();
 
-Refer to the combined usage section for examples.
+// 2. Define a specification
+public class ActiveProductsSpec : Specification<Product>
+{
+    public ActiveProductsSpec() : base(p => p.IsActive)
+    {
+        ApplyOrderBy(p => p.Name);
+        AddInclude(p => p.Category);
+    }
+}
+
+// 3. Use via UnitOfWork
+public class ProductService
+{
+    private readonly IUnitOfWork _unitOfWork;
+
+    public ProductService(IUnitOfWork unitOfWork)
+    {
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<List<Product>> GetActiveAsync()
+    {
+        var repo = _unitOfWork.Repository<Product>();
+        return await repo.Find(new ActiveProductsSpec()).ToListAsync();
+    }
+
+    public async Task CreateAsync(Product product)
+    {
+        _unitOfWork.Repository<Product>().Add(product);
+        await _unitOfWork.SaveChangesAsync();
+    }
+}
+
+// 4. Dynamic search + sort + page from API query strings
+var results = await repo.AsQueryable()
+    .ApplyQueryStringParametersAsync<Product, ProductDto>(
+        queryParams,
+        projection: p => new ProductDto { Id = p.Id, Name = p.Name },
+        searchFields: new() { p => p.Name, p => p.Description }
+    );
+// Returns ResultList<ProductDto> with Items, TotalResults, ResultsPerPage
+```
+
+📖 [Full documentation →](src/Poyraz.EntityFramework/README.md)
 
 ---
 
@@ -82,9 +121,6 @@ Refer to the combined usage section for examples.
 
 Contributions are welcome! Please submit issues and pull requests to help improve these libraries.
 
----
-
 ## License
 
-These projects are licensed under the MIT License.
-
+These projects are licensed under the [MIT License](LICENSE).

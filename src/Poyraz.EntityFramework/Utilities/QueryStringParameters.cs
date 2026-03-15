@@ -108,9 +108,18 @@ namespace Poyraz.EntityFramework.Utilities
 		}
 	}
 
-	public class DateRange
+	public interface IRangeFilter
+	{
+	}
+	public class DateRange : IRangeFilter
 	{
 		public DateOnly? Start { get; set; }
 		public DateOnly? End { get; set; }
+	}
+
+	public class NumberRange : IRangeFilter
+	{
+		public decimal? Start { get; set; }
+		public decimal? End { get; set; }
 	}
 }

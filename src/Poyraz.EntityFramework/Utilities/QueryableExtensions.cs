@@ -15,12 +15,26 @@ namespace Poyraz.EntityFramework.Utilities
 {
 	public static class QueryableExtensions
 	{
+		/// TODO: Time zone handling should be improved in the future to be more flexible and not hardcoded. For now, we are using "Europe/Istanbul" as the GMT+3 time zone for date range filtering.
+		private static TimeZoneInfo _gmt3TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
+
 		public static IQueryable<TEntity> ApplySpecification<TEntity>(this IQueryable<TEntity> query, ISpecification<TEntity> specification)
 			where TEntity : class, IEntity
 		{
 			return SpecificationEvaluator<TEntity>.GetQuery(query, specification);
 		}
 
+		/// <summary>
+		/// Applies filtering, sorting, searching and pagination based on the provided QueryStringParameters.
+		/// </summary>
+		/// <typeparam name="TEntity"></typeparam>
+		/// <typeparam name="TDto"></typeparam>
+		/// <param name="query"></param>
+		/// <param name="queryStringParameters"></param>
+		/// <param name="projection"></param>
+		/// <param name="searchFields"></param>
+		/// <param name="cancellationToken"></param>
+		/// <returns></returns>
 		public static async Task<ResultList<TDto>> ApplyQueryStringParametersAsync<TEntity, TDto>(this IQueryable<TEntity> query, QueryStringParameters queryStringParameters, Expression<Func<TEntity, TDto>> projection, List<Expression<Func<TEntity, string>>> searchFields = null, CancellationToken cancellationToken = default)
 			where TEntity : IEntity
 			where TDto : class
@@ -96,20 +110,38 @@ namespace Poyraz.EntityFramework.Utilities
 
 			query = SpecificationOrderEvaluator.ApplySort(query, result.HasValue ? result.Value.OrderQuery : string.Empty);
 
+			query = query.ApplyPagination(queryStringParameters);
+
+			return await query.ToResultListAsync(projection, totalCount, cancellationToken);
+		}
+
+		public static IQueryable<TEntity> ApplyPagination<TEntity>(this IQueryable<TEntity> query, QueryStringParameters queryStringParameters)
+			where TEntity : IEntity
+		{
+			if (queryStringParameters == null)
+				return query;
+
 			if (queryStringParameters.PageNumber > 0)
 			{
 				int skip = (queryStringParameters.PageNumber - 1) * queryStringParameters.PageSize;
 				query = query.Skip(skip);
 			}
 
-			query = query.Take(queryStringParameters.PageSize);
-
-			var resultDtoList = await query.Select(projection).ToArrayAsync(cancellationToken);
-
-			return new ResultList<TDto>(resultDtoList, totalCount);
+			return query.Take(queryStringParameters.PageSize);
 		}
 
-		public static IQueryable<T> ApplyDateRangeFilter<T, TProperty>(this IQueryable<T> query, DateRange range, Expression<Func<T, TProperty>> selector)
+		public static IQueryable<TEntity> ApplySort<TEntity, TDto>(this IQueryable<TEntity> query, QueryStringParameters queryStringParameters)
+			where TEntity : IEntity
+			where TDto : class
+		{
+			if (queryStringParameters == null)
+				return query;
+
+			var result = queryStringParameters.GetOrderAndSearchFromQueryString<TDto>(query.ElementType);
+			return SpecificationOrderEvaluator.ApplySort(query, result.HasValue ? result.Value.OrderQuery : string.Empty);
+		}
+
+		public static IQueryable<T> ApplyRangeFilter<T, TProperty>(this IQueryable<T> query, IRangeFilter range, Expression<Func<T, TProperty>> selector)
 		{
 			if (range == null)
 				return query;
@@ -118,30 +150,48 @@ namespace Poyraz.EntityFramework.Utilities
 			var propertyType = Nullable.GetUnderlyingType(typeof(TProperty)) ?? typeof(TProperty);
 			var memberExpression = selector.Body;
 
-			if (propertyType == typeof(DateOnly))
+			if (range is DateRange dateRange)
 			{
-				if (range.Start.HasValue)
+				if (propertyType == typeof(DateOnly))
 				{
-					query = ApplyComparisonFilter(query, memberExpression, range.Start.Value, nullableType, true, selector.Parameters);
-				}
+					if (dateRange.Start.HasValue)
+					{
+						query = ApplyComparisonFilter(query, memberExpression, dateRange.Start.Value, nullableType, true, selector.Parameters);
+					}
 
-				if (range.End.HasValue)
+					if (dateRange.End.HasValue)
+					{
+						query = ApplyComparisonFilter(query, memberExpression, dateRange.End.Value, nullableType, false, selector.Parameters);
+					}
+				}
+				else if (propertyType == typeof(DateTime))
 				{
-					query = ApplyComparisonFilter(query, memberExpression, range.End.Value, nullableType, false, selector.Parameters);
+					if (dateRange.Start.HasValue)
+					{
+						var startValue = TimeZoneInfo.ConvertTimeToUtc(dateRange.Start.Value.ToDateTime(TimeOnly.MinValue), _gmt3TimeZone);
+						query = ApplyComparisonFilter(query, memberExpression, startValue, nullableType, true, selector.Parameters);
+					}
+
+					if (dateRange.End.HasValue)
+					{
+						var endValue = TimeZoneInfo.ConvertTimeToUtc(dateRange.End.Value.ToDateTime(TimeOnly.MaxValue), _gmt3TimeZone);
+						query = ApplyComparisonFilter(query, memberExpression, endValue, nullableType, false, selector.Parameters);
+					}
+				}
+				else
+				{
+					throw new InvalidOperationException("Unsupported property type.");
 				}
 			}
-			else if (propertyType == typeof(DateTime))
+			else if (range is NumberRange numberRange)
 			{
-				if (range.Start.HasValue)
+				if (numberRange.Start.HasValue)
 				{
-					var startValue = range.Start.Value.ToDateTime(TimeOnly.MinValue);
-					query = ApplyComparisonFilter(query, memberExpression, startValue, nullableType, true, selector.Parameters);
+					query = ApplyComparisonFilter(query, memberExpression, numberRange.Start.Value, nullableType, true, selector.Parameters);
 				}
-
-				if (range.End.HasValue)
+				if (numberRange.End.HasValue)
 				{
-					var endValue = range.End.Value.ToDateTime(TimeOnly.MaxValue);
-					query = ApplyComparisonFilter(query, memberExpression, endValue, nullableType, false, selector.Parameters);
+					query = ApplyComparisonFilter(query, memberExpression, numberRange.End.Value, nullableType, false, selector.Parameters);
 				}
 			}
 			else
@@ -231,5 +281,18 @@ namespace Poyraz.EntityFramework.Utilities
 			return null;
 		}
 
+		public static ResultList<TDto> ToResultList<TEntity, TDto>(this IQueryable<TEntity> query, Expression<Func<TEntity, TDto>> projection)
+			where TEntity : IEntity
+			where TDto : class
+		{
+			var result = query.Select(projection).ToArray();
+			return new ResultList<TDto>(result);
+		}
+
+		public static async Task<ResultList<TDto>> ToResultListAsync<TEntity, TDto>(this IQueryable<TEntity> query, Expression<Func<TEntity, TDto>> projection, int? totalResults = null, CancellationToken cancellationToken = default)
+		{
+			var result = await query.Select(projection).ToArrayAsync(cancellationToken);
+			return new ResultList<TDto>(result, totalResults ?? result.Length);
+		}
 	}
 }

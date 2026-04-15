@@ -7,7 +7,7 @@ namespace Poyraz.Helpers.Primitives
 		object GetData();
 	}
 
-	public class Result<TData> : Result, IResultWithData
+	public partial class Result<TData> : Result, IResultWithData
 	{
 		private TData _data;
 

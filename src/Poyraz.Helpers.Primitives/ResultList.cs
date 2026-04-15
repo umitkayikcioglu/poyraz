@@ -1,6 +1,6 @@
 ﻿namespace Poyraz.Helpers.Primitives
 {
-	public class ResultList<TItem>
+	public partial class ResultList<TItem>
 	{
 		public ResultList(TItem[] items, int totalResults)
 		{

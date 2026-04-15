@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace Poyraz.Helpers.Primitives
 {
-	public class Result
+	public partial class Result
 	{
 		protected internal Result(bool isSuccess, Error error)
 		{
@@ -36,6 +36,7 @@ namespace Poyraz.Helpers.Primitives
 		public static Result Success() => new Result(true, Error.None);
 		public static Result<TData> Success<TData>(TData data) => new Result<TData>(data, true, Error.None);
 
+		public static Result Failure(string error) => new Result(false, new Error(error));
 		public static Result Failure(Error error) => new Result(false, error);
 		public static Result Failure(Error[] errors) => new Result(false, errors);
 

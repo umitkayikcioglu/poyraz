@@ -40,6 +40,7 @@ namespace Poyraz.Helpers.Primitives
 		public static Result Failure(Error error) => new Result(false, error);
 		public static Result Failure(Error[] errors) => new Result(false, errors);
 
+		public static Result<TData> Failure<TData>(string error) => new Result<TData>(default, false, new Error(error));
 		public static Result<TData> Failure<TData>(Error error) => new Result<TData>(default, false, error);
 		public static Result<TData> Failure<TData>(Error[] errors) => new Result<TData>(default, false, errors);
 

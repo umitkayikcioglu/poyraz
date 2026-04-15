@@ -210,7 +210,7 @@ jobs:
     if: (contains(toJson(github.event.commits), '[rolling deployment]') || contains(toJson(github.event.client_payload), '"sha"') || github.event.inputs.rollingDeployment == 'true' )
     strategy:
       matrix:
-        repo: ['umitkayikcioglu/ruya']
+        repo: ['umitkayikcioglu/poyraz']
     runs-on: ubuntu-latest
     steps:
       - name: Repository Dispatch
